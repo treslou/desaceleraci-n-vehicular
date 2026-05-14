@@ -244,26 +244,12 @@
             </div>
         </div>
 
-        <!-- Pico Máximo + Distancia de Parada -->
-        <div class="grid grid-cols-2 gap-2">
-            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Pico Máximo</p>
-                <p id="maxAcc" class="font-mono text-2xl font-black text-yellow-400 tabular-nums">0.00</p>
-                <p class="text-[9px] text-slate-500 mt-0.5">m/s²</p>
-                <p id="maxG"  class="text-[10px] text-yellow-600 font-mono mt-1">0.000 g</p>
-            </div>
-            <!--
-                TARJETA: Distancia de Parada Estimada
-                Fórmula: d = v₀² / (2·a)
-                Referencia: 50 km/h = 13.89 m/s (velocidad urbana típica)
-                Fuente: Física clásica de cinemática / NHTSA braking standards
-            -->
-            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Dist. Parada (50 km/h)</p>
-                <p id="stopDist" class="font-mono text-2xl font-black text-cyan-400 tabular-nums">--</p>
-                <p class="text-[9px] text-slate-500 mt-0.5">metros</p>
-                <p id="stopDistLabel" class="text-[10px] text-slate-600 font-mono mt-1 truncate">d = v²/(2a)</p>
-            </div>
+        <!-- Pico Máximo -->
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
+            <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Pico Máximo</p>
+            <p id="maxAcc" class="font-mono text-2xl font-black text-yellow-400 tabular-nums">0.00</p>
+            <p class="text-[9px] text-slate-500 mt-0.5">m/s²</p>
+            <p id="maxG"  class="text-[10px] text-yellow-600 font-mono mt-1">0.000 g</p>
         </div>
 
         <!-- ══ Desaceleración Actual (tarjeta principal) ══ -->
@@ -364,11 +350,6 @@
 //  - Frenado moderado:   ~5 m/s²  (~0.5 g)
 //  - Frenado brusco:     ~7 m/s²  (~0.7 g)
 //  - Frenado emergencia: ≥9 m/s²  (~0.9 g) — límite físico asfalto seco
-//
-//  DISTANCIA DE PARADA (d = v₀² / (2·a)):
-//  Fórmula cinemática estándar para frenado uniformemente desacelerado.
-//  v₀ = velocidad inicial (m/s), a = desaceleración (m/s²)
-//  Referencia urbana: 50 km/h = 13.89 m/s
 // ════════════════════════════════════════════════════════
 const G              = 9.81;   // m/s² — gravedad estándar
 const UMBRAL_INICIO  = 2.0;    // m/s² — a partir de aquí se considera frenado
@@ -377,7 +358,6 @@ const MAG_CHART_MIN  = 0.5;    // m/s² — mínimo para dibujar en gráfica (ev
 const EVENT_END_MS   = 700;    // ms de calma antes de cerrar un evento
 const CHART_FPS      = 15;     // actualizaciones de gráfica por segundo aprox.
 const MAX_POINTS     = 60;     // puntos en el buffer de la gráfica
-const V_REF_MS       = 50 / 3.6; // 50 km/h en m/s → referencia urbana típica
 
 // ═══════════ ESTADO INTERNO ═══════════
 let maxAcceleration = 0;
@@ -548,24 +528,6 @@ function handleMotion(event) {
         document.getElementById('maxG').innerText   = (maxAcceleration / G).toFixed(3) + ' g';
     }
 
-    // ── Distancia de Parada estimada (d = v₀² / 2a) ──
-    // Referencia: 50 km/h (velocidad urbana estándar Ecuador / Latinoamérica)
-    // Solo se calcula cuando hay frenado activo (mag ≥ UMBRAL_INICIO)
-    // Así evitamos divisiones por valores de ruido cercanos a cero
-    if (mag >= UMBRAL_INICIO) {
-        const dist = (V_REF_MS * V_REF_MS) / (2 * mag); // metros
-        document.getElementById('stopDist').innerText      = dist.toFixed(1);
-        document.getElementById('stopDistLabel').innerText = 'desde 50 km/h';
-        // Color según severidad
-        document.getElementById('stopDist').className =
-            'font-mono text-2xl font-black tabular-nums ' +
-            (mag >= UMBRAL_PELIGRO ? 'text-red-400' : 'text-cyan-400');
-    } else {
-        document.getElementById('stopDist').innerText      = '--';
-        document.getElementById('stopDistLabel').innerText = 'd = v²/(2a)';
-        document.getElementById('stopDist').className      = 'font-mono text-2xl font-black tabular-nums text-cyan-400';
-    }
-
     // ════════════════════════════════════════
     //  LÓGICA DE DETECCIÓN DE FRENADA
     // ════════════════════════════════════════
@@ -729,11 +691,6 @@ document.getElementById('resetBtn').addEventListener('click', () => {
     document.getElementById('valZ').innerText      = '0.00';
     document.getElementById('levelBar').style.width = '0%';
     document.getElementById('eventCount').innerText = '0 eventos';
-
-    // UI — distancia de parada
-    document.getElementById('stopDist').innerText      = '--';
-    document.getElementById('stopDistLabel').innerText = 'd = v²/(2a)';
-    document.getElementById('stopDist').className      = 'font-mono text-2xl font-black tabular-nums text-cyan-400';
 
     document.getElementById('totalAcc').className =
         'font-mono text-6xl font-black tabular-nums leading-none text-white';
