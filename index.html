@@ -3,79 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Análisis de Desaceleración Pro</title>
-    
-    <!-- CARGA DE ESTILOS SEGURA PARA MÓVILES -->
+    <title>Telemetría Pro: GPS + G-Force</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-
     <style>
-        /* Ajustes adicionales para asegurar la estética oscura en cualquier dispositivo */
         body { background-color: #0f172a; color: white; }
-        .bg-slate-900 { background-color: #0f172a; }
         .bg-slate-800 { background-color: #1e293b; }
-        .bg-slate-700 { background-color: #334155; }
-        .border-slate-700 { border-color: #334155; }
-        #brakingChart { max-height: 150px; width: 100% !important; }
+        .text-neon { color: #22d3ee; text-shadow: 0 0 10px rgba(34, 211, 238, 0.5); }
+        #brakingChart { max-height: 140px; }
     </style>
 </head>
-<body class="p-5 font-sans">
+<body class="p-4 font-sans">
     <div class="max-w-md mx-auto space-y-4">
         <header class="text-center">
-            <h1 class="text-xl font-bold text-blue-400">Análisis de Desaceleración</h1>
-            <p class="text-xs text-gray-400">Ingeniería en Ciencias de la Computación</p>
+            <h1 class="text-2xl font-black text-blue-500 italic">SYSTEM SENSOR PRO</h1>
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">Acelerometría + Geolocalización Satelital</p>
         </header>
 
-        <button id="initBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-lg font-bold transition-all shadow-lg">
-            ACTIVAR SENSORES (ACELERÓMETRO)
+        <button id="initBtn" class="w-full bg-blue-600 p-5 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">
+            ACTIVAR TELEMETRÍA TOTAL
         </button>
 
         <div id="dashboard" class="hidden space-y-4">
-            <div class="grid grid-cols-3 gap-2 text-xs font-mono text-center">
-                <div class="bg-slate-800 p-2 rounded">X: <span id="valX" class="text-blue-300">0.00</span></div>
-                <div class="bg-slate-800 p-2 rounded">Y: <span id="valY" class="text-green-300">0.00</span></div>
-                <div class="bg-slate-800 p-2 rounded">Z: <span id="valZ" class="text-purple-300">0.00</span></div>
+            <!-- GPS Status -->
+            <div id="gpsStatus" class="bg-slate-800 p-2 rounded-lg border border-slate-700 text-[10px] flex justify-between px-4">
+                <span>ESTADO GPS: <b id="gpsState" class="text-yellow-500">Buscando señal...</b></span>
+                <span>PRECISIÓN: <b id="gpsAcc">--</b> m</span>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
-                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-                    <p class="text-gray-400 text-xs uppercase tracking-wider">Pico Máximo</p>
-                    <div id="maxAcc" class="text-2xl font-black text-yellow-400">0.00</div>
-                    <p class="text-xs">m/s²</p>
+            <!-- Velocidad y Fuerza G -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-slate-800 p-5 rounded-3xl border border-slate-700 text-center">
+                    <p class="text-gray-500 text-[10px] uppercase font-bold">Velocidad (GPS)</p>
+                    <div id="speedDisp" class="text-4xl font-black text-neon">0.0</div>
+                    <p class="text-[10px] text-cyan-700 font-bold">km/h</p>
                 </div>
-                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-                    <p class="text-gray-400 text-xs uppercase tracking-wider">Velocidad Est.</p>
-                    <div id="velValue" class="text-2xl font-black text-cyan-400">0.0</div>
-                    <p class="text-xs">km/h</p>
+                <div class="bg-slate-800 p-5 rounded-3xl border border-slate-700 text-center">
+                    <p class="text-gray-500 text-[10px] uppercase font-bold">Pico de Fuerza</p>
+                    <div id="maxGDisp" class="text-4xl font-black text-yellow-400">0.00</div>
+                    <p class="text-[10px] text-yellow-700 font-bold">G</p>
                 </div>
             </div>
 
-            <div class="bg-slate-800 p-6 rounded-2xl border-2 border-slate-700 text-center">
-                <p class="text-gray-400 uppercase text-xs tracking-widest mb-1">Aceleración Actual</p>
-                <div id="totalAcc" class="text-6xl font-black mb-2">0.00</div>
-                <p class="text-sm">m/s²</p>
+            <!-- Display Aceleración Real -->
+            <div class="bg-slate-800 p-6 rounded-[2rem] border-2 border-slate-700 text-center">
+                <p class="text-gray-400 uppercase text-xs font-bold mb-1">Desaceleración (m/s²)</p>
+                <div id="totalAcc" class="text-7xl font-black italic">0.00</div>
             </div>
 
-            <button id="resetBtn" class="w-full bg-slate-700 py-2 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-600">
-                Reiniciar Métricas
-            </button>
-
-            <div id="statusCard" class="p-4 rounded-xl text-center font-bold text-lg border-2 border-transparent transition-all bg-slate-800">
-                ESTACIONARIO / CONSTANTE
-            </div>
-
-            <div class="bg-slate-800 p-2 rounded-xl border border-slate-700">
+            <!-- Gráfico -->
+            <div class="bg-slate-800 p-2 rounded-2xl border border-slate-700">
                 <canvas id="brakingChart"></canvas>
             </div>
 
-            <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                <table class="w-full text-left text-xs">
-                    <thead class="bg-slate-700 text-gray-300 uppercase">
+            <!-- Historial -->
+            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+                <table class="w-full text-left text-[11px]">
+                    <thead class="bg-slate-700 text-gray-400 uppercase">
                         <tr>
-                            <th class="p-2">Evento</th>
-                            <th class="p-2">Pico</th>
+                            <th class="p-2">Tipo</th>
+                            <th class="p-2">V. Inicial</th>
                             <th class="p-2">Distancia</th>
-                            <th class="p-2">Hora</th>
+                            <th class="p-2">G-Max</th>
                         </tr>
                     </thead>
                     <tbody id="eventLog"></tbody>
@@ -86,133 +75,113 @@
 
     <script>
         const initBtn = document.getElementById('initBtn');
-        const resetBtn = document.getElementById('resetBtn');
-        const statusCard = document.getElementById('statusCard');
         const eventLog = document.getElementById('eventLog');
         
-        let maxAcceleration = 0;
-        let isRecordingEvent = false;
-        let eventDistance = 0;
-        let eventMaxAcc = 0;
-        let lastTimestamp = Date.now();
+        let currentSpeedMS = 0; // Metros por segundo (del GPS)
+        let speedAtBrakingStart = 0;
+        let smoothedMag = 0;
+        let maxAccInEvent = 0;
+        let isBraking = false;
+        let lastMag = 0;
 
-        const UMBRAL_FRENADO = 1.5;
-        const UMBRAL_PELIGRO = 4.5;
-        const FILTRO_RUIDO = 0.4;
+        const ALPHA = 0.2;
+        const UMBRAL_FRENADO = 2.2;
+        const G_UNIT = 9.80665;
 
+        // Config Chart.js
         const ctx = document.getElementById('brakingChart').getContext('2d');
         const chart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: Array(40).fill(""),
+                labels: Array(30).fill(""),
                 datasets: [{
-                    data: Array(40).fill(0),
-                    borderColor: '#3b82f6',
-                    borderWidth: 2,
-                    tension: 0.3,
+                    data: Array(30).fill(0),
+                    borderColor: '#06b6d4',
+                    borderWidth: 3,
+                    tension: 0.4,
                     pointRadius: 0,
                     fill: true,
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)'
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                scales: { 
-                    y: { min: 0, max: 10, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }, 
-                    x: { display: false } 
-                },
-                plugins: { legend: { display: false } }
-            }
+            options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { y: { display: false }, x: { display: false } }, plugins: { legend: { display: false } } }
         });
 
         async function start() {
+            // 1. Permisos Acelerómetro (iOS)
             if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                try {
-                    const res = await DeviceMotionEvent.requestPermission();
-                    if (res !== 'granted') return alert("Permiso denegado");
-                } catch (e) { console.error(e); }
+                await DeviceMotionEvent.requestPermission();
             }
-            initBtn.classList.add('hidden');
+
+            // 2. Activar GPS en tiempo real
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition(
+                    (pos) => {
+                        currentSpeedMS = pos.coords.speed || 0; // Velocidad en m/s
+                        document.getElementById('speedDisp').innerText = (currentSpeedMS * 3.6).toFixed(1);
+                        document.getElementById('gpsState').innerText = "CONECTADO";
+                        document.getElementById('gpsState').className = "text-green-500";
+                        document.getElementById('gpsAcc').innerText = pos.coords.accuracy.toFixed(0);
+                    },
+                    (err) => { console.error(err); },
+                    { enableHighAccuracy: true }
+                );
+            }
+
+            initBtn.style.display = 'none';
             document.getElementById('dashboard').classList.remove('hidden');
             window.addEventListener('devicemotion', handleMotion);
         }
 
         function handleMotion(event) {
-            const now = Date.now();
-            const dt = (now - lastTimestamp) / 1000;
-            lastTimestamp = now;
-
             let x = event.acceleration?.x || 0;
             let y = event.acceleration?.y || 0;
             let z = event.acceleration?.z || 0;
-            let mag = Math.sqrt(x*x + y*y + z*z);
+            let rawMag = Math.sqrt(x*x + y*y + z*z);
 
-            if (mag < FILTRO_RUIDO) mag = 0;
+            // Filtro Low-Pass
+            smoothedMag = (ALPHA * rawMag) + ((1 - ALPHA) * lastMag);
+            lastMag = smoothedMag;
 
-            document.getElementById('valX').innerText = x.toFixed(2);
-            document.getElementById('valY').innerText = y.toFixed(2);
-            document.getElementById('valZ').innerText = z.toFixed(2);
-            document.getElementById('totalAcc').innerText = mag.toFixed(2);
+            document.getElementById('totalAcc').innerText = smoothedMag.toFixed(2);
+            document.getElementById('maxGDisp').innerText = (smoothedMag / G_UNIT).toFixed(2);
 
-            if (mag > maxAcceleration) {
-                maxAcceleration = mag;
-                document.getElementById('maxAcc').innerText = maxAcceleration.toFixed(2);
+            // Lógica de Frenado
+            if (smoothedMag > UMBRAL_FRENADO) {
+                if (!isBraking) {
+                    isBraking = true;
+                    speedAtBrakingStart = currentSpeedMS;
+                    maxAccInEvent = 0;
+                }
+                if (smoothedMag > maxAccInEvent) maxAccInEvent = smoothedMag;
+            } else if (isBraking) {
+                // Evento terminado
+                registrarEvento(maxAccInEvent, speedAtBrakingStart);
+                isBraking = false;
             }
 
-            if (mag > UMBRAL_FRENADO) {
-                if (!isRecordingEvent) {
-                    isRecordingEvent = true;
-                    eventDistance = 0;
-                    eventMaxAcc = 0;
-                }
-                if (mag > eventMaxAcc) eventMaxAcc = mag;
-                eventDistance += (0.5 * mag * Math.pow(dt, 2)); 
-
-                if (mag > UMBRAL_PELIGRO) {
-                    statusCard.innerText = "¡FRENADO PELIGROSO!";
-                    statusCard.className = "p-4 rounded-xl text-center font-bold text-lg bg-red-900 border-red-500 text-red-200";
-                } else {
-                    statusCard.innerText = "FRENANDO...";
-                    statusCard.className = "p-4 rounded-xl text-center font-bold text-lg bg-yellow-900 border-yellow-500 text-yellow-200";
-                }
-            } else {
-                if (isRecordingEvent) {
-                    agregarATabla(eventMaxAcc, eventDistance);
-                    isRecordingEvent = false;
-                }
-                statusCard.innerText = "ESTACIONARIO / CONSTANTE";
-                statusCard.className = "p-4 rounded-xl text-center font-bold text-lg bg-slate-800 border-slate-600 text-gray-400";
-            }
-            updateChart(mag);
-        }
-
-        function agregarATabla(pico, dist) {
-            const row = document.createElement('tr');
-            const esPeligro = pico > UMBRAL_PELIGRO;
-            row.className = "border-b border-slate-700";
-            const distFinal = dist < 0.1 ? (pico * 0.25).toFixed(1) : dist.toFixed(1);
-            row.innerHTML = `
-                <td class="p-2 font-bold ${esPeligro ? 'text-red-400' : 'text-green-400'}">${esPeligro ? 'PELIGRO' : 'NORMAL'}</td>
-                <td class="p-2 font-mono">${pico.toFixed(2)}</td>
-                <td class="p-2 font-mono">${distFinal}m</td>
-                <td class="p-2 text-gray-500">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</td>
-            `;
-            eventLog.prepend(row);
-        }
-
-        function updateChart(val) {
-            chart.data.datasets[0].data.push(val);
+            chart.data.datasets[0].data.push(smoothedMag);
             chart.data.datasets[0].data.shift();
             chart.update('none');
         }
 
-        resetBtn.addEventListener('click', () => {
-            maxAcceleration = 0;
-            document.getElementById('maxAcc').innerText = "0.00";
-            eventLog.innerHTML = "";
-        });
+        function registrarEvento(accPico, vInicial) {
+            // FÓRMULA FÍSICA REAL: d = v^2 / (2 * a)
+            // Asumimos vFinal = 0 para calcular distancia de parada total
+            const distancia = (vInicial ** 2) / (2 * accPico);
+            const gPico = accPico / G_UNIT;
+            const esPeligroso = gPico > 0.55;
+
+            const row = document.createElement('tr');
+            row.className = "border-b border-slate-700 bg-slate-800/40";
+            row.innerHTML = `
+                <td class="p-2 font-bold ${esPeligroso ? 'text-red-500' : 'text-green-500'}">${esPeligroso ? 'CRÍTICO' : 'NORMAL'}</td>
+                <td class="p-2">${(vInicial * 3.6).toFixed(1)} km/h</td>
+                <td class="p-2 font-mono font-bold">${vInicial > 0.5 ? distancia.toFixed(1) + 'm' : 'N/A'}</td>
+                <td class="p-2 text-yellow-500">${gPico.toFixed(2)}G</td>
+            `;
+            eventLog.prepend(row);
+        }
 
         initBtn.addEventListener('click', start);
     </script>
