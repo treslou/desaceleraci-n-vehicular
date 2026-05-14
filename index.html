@@ -130,7 +130,7 @@
         .text-xl   { font-size: 1.25rem; }
         .text-2xl  { font-size: 1.5rem; }
         .text-6xl  { font-size: 3.75rem; }
-        /* Tamaños arbitrarios (requieren escape de [] en CSS) */
+        /* Tamaños arbitrarios */
         .text-\[8px\]  { font-size: 8px; }
         .text-\[9px\]  { font-size: 9px; }
         .text-\[10px\] { font-size: 10px; }
@@ -162,7 +162,7 @@
         .bg-blue-500    { background-color: #3b82f6; }
         .bg-red-500     { background-color: #ef4444; }
         .bg-yellow-400  { background-color: #facc15; }
-        /* Con opacidad (/ modifier de Tailwind → rgba) */
+        /* Con opacidad */
         .bg-red-950\/60   { background-color: rgba(69,10,10,0.6); }
         .bg-green-950\/60 { background-color: rgba(5,46,22,0.6); }
 
@@ -187,7 +187,6 @@
 
         /* Sombra */
         .shadow-lg        { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3), 0 4px 6px -4px rgba(0,0,0,0.2); }
-        .shadow-blue-900\/40 { /* modificador de color de sombra: ya incluido en shadow-lg */ }
 
         /* Transiciones */
         .transition-all    { transition-property: all;                                     transition-timing-function: ease; }
@@ -220,7 +219,7 @@
     <!-- ══════════ BOTÓN DE INICIO ══════════ -->
     <button id="initBtn"
         class="w-full bg-blue-600 hover:bg-blue-500 active:scale-95 py-5 rounded-2xl font-black text-base uppercase tracking-widest transition-all duration-200 shadow-lg shadow-blue-900/40">
-        🚗&nbsp; Activar Sensores y GPS
+        🚗&nbsp; Activar Sensores
     </button>
 
     <!-- ══════════ DASHBOARD (oculto hasta iniciar) ══════════ -->
@@ -245,7 +244,7 @@
             </div>
         </div>
 
-        <!-- Pico Máximo + Velocidad GPS -->
+        <!-- Pico Máximo + Distancia de Parada -->
         <div class="grid grid-cols-2 gap-2">
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
                 <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Pico Máximo</p>
@@ -253,11 +252,17 @@
                 <p class="text-[9px] text-slate-500 mt-0.5">m/s²</p>
                 <p id="maxG"  class="text-[10px] text-yellow-600 font-mono mt-1">0.000 g</p>
             </div>
+            <!--
+                TARJETA: Distancia de Parada Estimada
+                Fórmula: d = v₀² / (2·a)
+                Referencia: 50 km/h = 13.89 m/s (velocidad urbana típica)
+                Fuente: Física clásica de cinemática / NHTSA braking standards
+            -->
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Velocidad GPS</p>
-                <p id="speedValue" class="font-mono text-2xl font-black text-cyan-400 tabular-nums">--</p>
-                <p class="text-[9px] text-slate-500 mt-0.5">km/h</p>
-                <p id="gpsStatus" class="text-[10px] text-slate-600 mt-1 truncate">Buscando señal…</p>
+                <p class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Dist. Parada (50 km/h)</p>
+                <p id="stopDist" class="font-mono text-2xl font-black text-cyan-400 tabular-nums">--</p>
+                <p class="text-[9px] text-slate-500 mt-0.5">metros</p>
+                <p id="stopDistLabel" class="text-[10px] text-slate-600 font-mono mt-1 truncate">d = v²/(2a)</p>
             </div>
         </div>
 
@@ -315,7 +320,7 @@
                             <th class="px-3 py-2">Tipo</th>
                             <th class="px-3 py-2">Pico</th>
                             <th class="px-3 py-2">G</th>
-                            <th class="px-3 py-2">Hora</th>
+                            <th class="px-3 py-2">Dur.</th>
                         </tr>
                     </thead>
                     <tbody id="eventLog">
@@ -359,6 +364,11 @@
 //  - Frenado moderado:   ~5 m/s²  (~0.5 g)
 //  - Frenado brusco:     ~7 m/s²  (~0.7 g)
 //  - Frenado emergencia: ≥9 m/s²  (~0.9 g) — límite físico asfalto seco
+//
+//  DISTANCIA DE PARADA (d = v₀² / (2·a)):
+//  Fórmula cinemática estándar para frenado uniformemente desacelerado.
+//  v₀ = velocidad inicial (m/s), a = desaceleración (m/s²)
+//  Referencia urbana: 50 km/h = 13.89 m/s
 // ════════════════════════════════════════════════════════
 const G              = 9.81;   // m/s² — gravedad estándar
 const UMBRAL_INICIO  = 2.0;    // m/s² — a partir de aquí se considera frenado
@@ -367,22 +377,26 @@ const MAG_CHART_MIN  = 0.5;    // m/s² — mínimo para dibujar en gráfica (ev
 const EVENT_END_MS   = 700;    // ms de calma antes de cerrar un evento
 const CHART_FPS      = 15;     // actualizaciones de gráfica por segundo aprox.
 const MAX_POINTS     = 60;     // puntos en el buffer de la gráfica
+const V_REF_MS       = 50 / 3.6; // 50 km/h en m/s → referencia urbana típica
 
 // ═══════════ ESTADO INTERNO ═══════════
 let maxAcceleration = 0;
 let filteredMag = 0;
 let filteredX = 0, filteredY = 0, filteredZ = 0;
 
-// Filtro pasa-bajo para los ejes (α: 0 = muy suavizado, 1 = sin filtro)
-const ALPHA = 0.2;
+// Filtro pasa-bajo para los ejes
+// α=0.25 → balance entre respuesta rápida y rechazo de ruido del sensor
+const ALPHA = 0.25;
 
 // Estimación de gravedad estática (para fallback sin event.acceleration)
+// Inicializada con la gravedad apuntando al eje Z (teléfono plano en mesa)
 let gX = 0, gY = 0, gZ = G;
 const G_ALPHA = 0.03; // actualización muy lenta → captura solo la componente estática
 
 // Control de eventos de frenado
 let isRecordingEvent = false;
 let currentEventMax  = 0;
+let eventStartTime   = null; // timestamp en ms para medir duración de la frenada
 let eventEndTimeout  = null;
 let eventCount       = 0;
 
@@ -406,10 +420,10 @@ const chart = new Chart(ctx, {
                 pointRadius: 0,
                 fill: true,
                 backgroundColor: 'rgba(59,130,246,0.07)',
-                spanGaps: false   // ← crea huecos cuando los datos son null (sin ruido)
+                spanGaps: false   // crea huecos cuando los datos son null → limpio en reposo
             },
             {
-                // Línea de umbral de peligro (estática)
+                // Línea de umbral de peligro (estática — siempre en 6 m/s²)
                 data: Array(MAX_POINTS).fill(UMBRAL_PELIGRO),
                 borderColor: 'rgba(239,68,68,0.5)',
                 borderWidth: 1.5,
@@ -440,7 +454,7 @@ const chart = new Chart(ctx, {
 });
 
 // ════════════════════════════════════════════════════════
-//  INICIO — permiso iOS 13+ y GPS
+//  INICIO — permiso iOS 13+ para acelerómetro
 // ════════════════════════════════════════════════════════
 document.getElementById('initBtn').addEventListener('click', async () => {
 
@@ -459,39 +473,10 @@ document.getElementById('initBtn').addEventListener('click', async () => {
         }
     }
 
-    // GPS para velocidad real
-    if ('geolocation' in navigator) {
-        navigator.geolocation.watchPosition(
-            handleGPS,
-            () => {
-                document.getElementById('gpsStatus').innerText   = 'GPS no disponible';
-                document.getElementById('speedValue').innerText  = '--';
-            },
-            { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
-        );
-    } else {
-        document.getElementById('gpsStatus').innerText = 'GPS no soportado';
-    }
-
     document.getElementById('initBtn').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
     window.addEventListener('devicemotion', handleMotion, { passive: true });
 });
-
-// ════════════════════════════════════════════════════════
-//  GPS — velocidad real del vehículo
-// ════════════════════════════════════════════════════════
-function handleGPS(pos) {
-    const spd = pos.coords.speed; // m/s (null si no disponible)
-    if (spd !== null && spd >= 0) {
-        document.getElementById('speedValue').innerText = (spd * 3.6).toFixed(1);
-        document.getElementById('gpsStatus').innerText  =
-            `±${pos.coords.accuracy.toFixed(0)} m precisión`;
-    } else {
-        document.getElementById('speedValue').innerText = '0.0';
-        document.getElementById('gpsStatus').innerText  = 'Señal débil';
-    }
-}
 
 // ════════════════════════════════════════════════════════
 //  ACELERÓMETRO — núcleo del análisis
@@ -499,7 +484,8 @@ function handleGPS(pos) {
 function handleMotion(event) {
     let ax, ay, az;
 
-    // ── Fuente 1: acceleration SIN gravedad (ideal para iPhone) ──
+    // ── Fuente 1: acceleration SIN gravedad (iPhone, Android moderno) ──
+    // Esta fuente es la más precisa; evita tener que separar la gravedad manualmente
     if (event.acceleration &&
         event.acceleration.x !== null &&
         event.acceleration.y !== null) {
@@ -508,12 +494,15 @@ function handleMotion(event) {
         az = event.acceleration.z || 0;
 
     // ── Fuente 2: fallback con separación manual de gravedad ──
+    // Algunos dispositivos Android solo exponen accelerationIncludingGravity
     } else {
         const rx = event.accelerationIncludingGravity?.x || 0;
         const ry = event.accelerationIncludingGravity?.y || 0;
         const rz = event.accelerationIncludingGravity?.z || 0;
 
         // Filtro pasa-bajo LENTO → estima solo la componente de gravedad estática
+        // La gravedad es una señal DC; G_ALPHA muy bajo garantiza que el filtro
+        // no siga aceleraciones transitorias (frenadas, golpes, etc.)
         gX = G_ALPHA * rx + (1 - G_ALPHA) * gX;
         gY = G_ALPHA * ry + (1 - G_ALPHA) * gY;
         gZ = G_ALPHA * rz + (1 - G_ALPHA) * gZ;
@@ -525,12 +514,14 @@ function handleMotion(event) {
     }
 
     // ── Filtro pasa-bajo exponencial por eje (reduce ruido del sensor) ──
+    // Nueva muestra: y[n] = α·x[n] + (1-α)·y[n-1]
     filteredX = ALPHA * ax + (1 - ALPHA) * filteredX;
     filteredY = ALPHA * ay + (1 - ALPHA) * filteredY;
     filteredZ = ALPHA * az + (1 - ALPHA) * filteredZ;
 
-    // ── Magnitud vectorial: ||a|| = √(x²+y²+z²) ──
-    // Usa los 3 ejes para ser independiente de la orientación del teléfono
+    // ── Magnitud vectorial total: ||a|| = √(x² + y² + z²) ──
+    // Usar los 3 ejes hace el análisis independiente de la orientación del teléfono.
+    // No importa si el teléfono está en el dashboard, en el bolsillo o en el soporte.
     const mag = Math.sqrt(filteredX**2 + filteredY**2 + filteredZ**2);
     filteredMag = mag;
 
@@ -543,7 +534,7 @@ function handleMotion(event) {
     document.getElementById('totalAcc').innerText = mag.toFixed(2);
     document.getElementById('gForce').innerText   = (mag / G).toFixed(3) + ' g';
 
-    // ── Barra de nivel (0 – 10 m/s²) ──
+    // ── Barra de nivel (escala 0 – 10 m/s²) ──
     const pct = Math.min(100, (mag / 10) * 100);
     const bar = document.getElementById('levelBar');
     bar.style.width = pct + '%';
@@ -557,6 +548,24 @@ function handleMotion(event) {
         document.getElementById('maxG').innerText   = (maxAcceleration / G).toFixed(3) + ' g';
     }
 
+    // ── Distancia de Parada estimada (d = v₀² / 2a) ──
+    // Referencia: 50 km/h (velocidad urbana estándar Ecuador / Latinoamérica)
+    // Solo se calcula cuando hay frenado activo (mag ≥ UMBRAL_INICIO)
+    // Así evitamos divisiones por valores de ruido cercanos a cero
+    if (mag >= UMBRAL_INICIO) {
+        const dist = (V_REF_MS * V_REF_MS) / (2 * mag); // metros
+        document.getElementById('stopDist').innerText      = dist.toFixed(1);
+        document.getElementById('stopDistLabel').innerText = 'desde 50 km/h';
+        // Color según severidad
+        document.getElementById('stopDist').className =
+            'font-mono text-2xl font-black tabular-nums ' +
+            (mag >= UMBRAL_PELIGRO ? 'text-red-400' : 'text-cyan-400');
+    } else {
+        document.getElementById('stopDist').innerText      = '--';
+        document.getElementById('stopDistLabel').innerText = 'd = v²/(2a)';
+        document.getElementById('stopDist').className      = 'font-mono text-2xl font-black tabular-nums text-cyan-400';
+    }
+
     // ════════════════════════════════════════
     //  LÓGICA DE DETECCIÓN DE FRENADA
     // ════════════════════════════════════════
@@ -565,18 +574,19 @@ function handleMotion(event) {
         // Cancela el cierre pendiente si vuelve a superar el umbral
         if (eventEndTimeout) { clearTimeout(eventEndTimeout); eventEndTimeout = null; }
 
-        // Abre nuevo evento
+        // Abre nuevo evento y registra el momento de inicio
         if (!isRecordingEvent) {
             isRecordingEvent = true;
             currentEventMax  = 0;
+            eventStartTime   = performance.now(); // ← marca de tiempo de inicio
         }
 
         if (mag > currentEventMax) currentEventMax = mag;
 
         // Colores dinámicos de la gráfica según intensidad
-        const isBraking  = mag >= UMBRAL_PELIGRO;
-        chart.data.datasets[0].borderColor      = isBraking ? '#ef4444' : '#f59e0b';
-        chart.data.datasets[0].backgroundColor  = isBraking
+        const isBraking = mag >= UMBRAL_PELIGRO;
+        chart.data.datasets[0].borderColor     = isBraking ? '#ef4444' : '#f59e0b';
+        chart.data.datasets[0].backgroundColor = isBraking
             ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.08)';
 
         setStatus(
@@ -591,12 +601,18 @@ function handleMotion(event) {
 
     } else {
 
-        // Cierre suavizado del evento (debounce anti-ruido)
+        // Cierre suavizado del evento (debounce anti-ruido de sensor)
+        // Espera EVENT_END_MS ms de calma antes de confirmar que el frenado terminó
         if (isRecordingEvent && !eventEndTimeout) {
             eventEndTimeout = setTimeout(() => {
                 if (isRecordingEvent) {
-                    registrarEvento(currentEventMax);
+                    // Calcular duración real de la frenada
+                    const durSeg = eventStartTime
+                        ? ((performance.now() - eventStartTime) / 1000)
+                        : 0;
+                    registrarEvento(currentEventMax, durSeg);
                     isRecordingEvent = false;
+                    eventStartTime   = null;
                 }
                 eventEndTimeout = null;
             }, EVENT_END_MS);
@@ -613,8 +629,8 @@ function handleMotion(event) {
 
     // ════════════════════════════════════════
     //  ACTUALIZACIÓN DE GRÁFICA (throttled)
-    //  Solo dibuja datos ≥ MAG_CHART_MIN para
-    //  evitar ruido en reposo (spanGaps: false)
+    //  Solo dibuja valores ≥ MAG_CHART_MIN para
+    //  evitar mostrar ruido en reposo (spanGaps:false)
     // ════════════════════════════════════════
     const now = performance.now();
     if (now - lastChartUpdate >= CHART_INTERVAL) {
@@ -640,51 +656,70 @@ function setStatus(text, type) {
     card.className = base + variants[type];
 }
 
-/** Registra un evento de frenado en la tabla */
-function registrarEvento(pico) {
+/**
+ * Registra un evento de frenado en la tabla.
+ * @param {number} pico      - Pico máximo detectado en m/s²
+ * @param {number} durSeg    - Duración de la frenada en segundos
+ */
+function registrarEvento(pico, durSeg) {
     const esPeligro = pico >= UMBRAL_PELIGRO;
     eventCount++;
-    document.getElementById('eventCount').innerText = eventCount + (eventCount === 1 ? ' evento' : ' eventos');
+    document.getElementById('eventCount').innerText =
+        eventCount + (eventCount === 1 ? ' evento' : ' eventos');
 
     // Quitar fila vacía si existe
     document.getElementById('emptyRow')?.remove();
+
+    // Hora local para identificar cuándo ocurrió el evento
+    const horaTexto = new Date().toLocaleTimeString('es-EC', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
 
     const row = document.createElement('tr');
     row.className = 'border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors duration-150';
     row.innerHTML = `
         <td class="px-3 py-2.5 font-black ${esPeligro ? 'text-red-400' : 'text-green-400'}">
             ${esPeligro ? '⚠ PELIGRO' : '✓ SEGURO'}
+            <div class="text-[9px] text-slate-600 font-sans font-normal">${horaTexto}</div>
         </td>
         <td class="px-3 py-2.5 font-mono text-white">${pico.toFixed(2)}<span class="text-slate-600 text-[9px]"> m/s²</span></td>
         <td class="px-3 py-2.5 font-mono text-slate-300">${(pico / G).toFixed(3)}<span class="text-slate-600 text-[9px]"> g</span></td>
-        <td class="px-3 py-2.5 font-mono text-slate-500 text-[10px]">
-            ${new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-        </td>
+        <td class="px-3 py-2.5 font-mono text-slate-400">${durSeg.toFixed(1)}<span class="text-slate-600 text-[9px]"> s</span></td>
     `;
     document.getElementById('eventLog').prepend(row);
 }
 
-/** Empuja un valor al buffer de la gráfica */
+/** Empuja un valor al buffer circular de la gráfica */
 function pushChart(val) {
     chart.data.datasets[0].data.push(val);
     chart.data.datasets[0].data.shift();
+    // El dataset[1] (umbral) es estático — siempre UMBRAL_PELIGRO
     chart.data.datasets[1].data.push(UMBRAL_PELIGRO);
     chart.data.datasets[1].data.shift();
     chart.update('none');
 }
 
 // ════════════════════════════════════════════════════════
-//  RESET
+//  RESET — reinicia todas las métricas y la UI
 // ════════════════════════════════════════════════════════
 document.getElementById('resetBtn').addEventListener('click', () => {
-    // Valores numéricos
-    maxAcceleration = 0;
-    filteredMag = filteredX = filteredY = filteredZ = 0;
+    // Estado numérico
+    maxAcceleration  = 0;
+    filteredMag      = 0;
+    filteredX        = 0;
+    filteredY        = 0;
+    filteredZ        = 0;
     isRecordingEvent = false;
+    currentEventMax  = 0;
+    eventStartTime   = null;
     eventCount       = 0;
+    // NOTA: gX, gY, gZ NO se resetean intencionalmente.
+    // La calibración de gravedad es continua y debe mantenerse
+    // para que el fallback de separación manual siga siendo preciso.
+
     if (eventEndTimeout) { clearTimeout(eventEndTimeout); eventEndTimeout = null; }
 
-    // UI
+    // UI — valores numéricos
     document.getElementById('maxAcc').innerText    = '0.00';
     document.getElementById('maxG').innerText      = '0.000 g';
     document.getElementById('totalAcc').innerText  = '0.00';
@@ -695,10 +730,15 @@ document.getElementById('resetBtn').addEventListener('click', () => {
     document.getElementById('levelBar').style.width = '0%';
     document.getElementById('eventCount').innerText = '0 eventos';
 
+    // UI — distancia de parada
+    document.getElementById('stopDist').innerText      = '--';
+    document.getElementById('stopDistLabel').innerText = 'd = v²/(2a)';
+    document.getElementById('stopDist').className      = 'font-mono text-2xl font-black tabular-nums text-cyan-400';
+
     document.getElementById('totalAcc').className =
         'font-mono text-6xl font-black tabular-nums leading-none text-white';
 
-    // Tabla
+    // Tabla de eventos
     document.getElementById('eventLog').innerHTML = `
         <tr id="emptyRow">
             <td colspan="4" class="px-3 py-5 text-center text-slate-700 text-[10px] italic">
